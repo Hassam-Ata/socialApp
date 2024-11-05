@@ -1,5 +1,6 @@
 import { pool } from "../connect.js";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
 export const register = (req, res) => {
   const { username, email, password, name } = req.body;
@@ -33,5 +34,36 @@ export const register = (req, res) => {
   });
 };
 
-export const login = (req, res) => {};
+export const login = (req, res) => {
+  const q = "SELECT * FROM users WHERE username = $1"; // Use $1 for PostgreSQL parameterized queries
+
+  // Query the database
+  pool.query(q, [req.body.username], (err, data) => {
+    if (err) return res.status(500).json(err); // Internal server error
+    if (data.rows.length === 0) return res.status(404).json("User not found!"); // User not found
+
+    // Compare password
+    const checkPassword = bcrypt.compareSync(
+      req.body.password,
+      data.rows[0].password
+    );
+    if (!checkPassword) {
+      return res.status(400).json("Wrong password or username!");
+    }
+
+    // Create a JWT token
+    const token = jwt.sign({ id: data.rows[0].id }, "secretkey");
+
+    // Destructure to exclude the password from the response
+    const { password, ...others } = data.rows[0];
+
+    // Set the token in a cookie and send the user data as a response
+    res
+      .cookie("accessToken", token, {
+        httpOnly: true,
+      })
+      .status(200)
+      .json(others); // Send the other user data (without the password)
+  });
+};
 export const logout = (req, res) => {};
